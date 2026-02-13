@@ -92,8 +92,96 @@
                                     <option value="Tunai">Tunai</option>
                                     <option value="QRIS">QRIS</option>
                                     <option value="Transfer Bank">Transfer Bank</option>
+                                    {{-- <option value="E-Wallet">E-Wallet</option> --}}
+                                </select>
+                            </div>
+
+                            {{-- @@ -74,50 +74,77 @@
+                            class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 lead --}}
+                            <div class="flex
+                            justify-between mb-2">
+                                <span class="text-gray-600">Subtotal:</span>
+                                <span id="subtotal" class="font-semibold">Rp. 0</span>
+                            </div>
+                            <div class="flex justify-between mb-2">
+                                <span class="text-gray-600">Pajak (10%):</span>
+                                <span id="tax" class="font-semibold">Rp. 0</span>
+                            </div>
+                            <div class="flex justify-between mb-4">
+                                <span class="text-gray-800 font-bold">Total:</span>
+                                <span id="total" class="font-bold text-lg">Rp. 0</span>
+                            </div>
+
+                            <!-- Payment Method -->
+                            {{-- <div class="mb-4">
+                                <label class="block text-gray-700 text-sm font-bold mb-2">Metode Pembayaran</label>
+                                <select id="metode_pembayaran" name="metode_pembayaran"
+                                    class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
+                                    <option value="Tunai">Tunai</option>
+                                    <option value="QRIS">QRIS</option>
+                                    <option value="Transfer Bank">Transfer Bank</option>
                                     <option value="E-Wallet">E-Wallet</option>
                                 </select>
+                            </div> --}}
+
+                            <div id="non-cash-info"
+                                class="hidden mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                                <h4 class="text-sm font-semibold text-indigo-900">Informasi Pembayaran Non-Tunai</h4>
+
+                                <div id="qris-info" class="hidden mt-3">
+                                    <p class="text-xs text-indigo-700 mb-2">Scan QR dummy berikut untuk menyelesaikan
+                                        transaksi
+                                        QRIS:</p>
+                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
+                                        alt="QRIS Dummy" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
+                                    <p class="text-xs text-indigo-700 mt-2 text-center">Ref: QRIS-NM-001 (Dummy)</p>
+                                </div>
+
+                                <div id="bank-transfer-info" class="hidden mt-3 space-y-2">
+                                    <p class="text-xs text-indigo-700">Transfer ke rekening dummy berikut:</p>
+                                    <div class="text-sm text-indigo-900 bg-white rounded border p-2">
+                                        <p><span class="font-semibold">Bank:</span> Bank Nasigoreng</p>
+                                        <p><span class="font-semibold">No. Rekening:</span> 1234567890</p>
+                                        <p><span class="font-semibold">Nama:</span> PT Nasigoreng Masreno</p>
+                                    </div>
+                                    <div class="text-sm text-indigo-900 bg-white rounded border p-2">
+                                        <p><span class="font-semibold">Virtual Account:</span> 8808123456789012</p>
+                                        <p><span class="font-semibold">Provider:</span> VA Dummy Midtrans</p>
+                                    </div>
+                                </div>
+
+                                <p class="text-xs text-indigo-700 mt-3">Untuk mode demo, transaksi bisa langsung diproses.
+                                </p>
+                            </div>
+
+                            <div id="non-cash-info"
+                                class="hidden mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
+                                <h4 class="text-sm font-semibold text-indigo-900">Informasi Pembayaran Non-Tunai</h4>
+
+                                <div id="qris-info" class="hidden mt-3">
+                                    <p class="text-xs text-indigo-700 mb-2">Scan QR dummy berikut untuk menyelesaikan
+                                        transaksi
+                                        QRIS:</p>
+                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
+                                        alt="QRIS Dummy" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
+                                    <p class="text-xs text-indigo-700 mt-2 text-center">Ref: QRIS-NM-001 (Dummy)</p>
+                                </div>
+
+                                <div id="bank-transfer-info" class="hidden mt-3 space-y-2">
+                                    <p class="text-xs text-indigo-700">Transfer ke rekening dummy berikut:</p>
+                                    <div class="text-sm text-indigo-900 bg-white rounded border p-2">
+                                        <p><span class="font-semibold">Bank:</span> Bank Nasigoreng</p>
+                                        <p><span class="font-semibold">No. Rekening:</span> 1234567890</p>
+                                        <p><span class="font-semibold">Nama:</span> PT Nasigoreng Masreno</p>
+                                    </div>
+                                    <div class="text-sm text-indigo-900 bg-white rounded border p-2">
+                                        <p><span class="font-semibold">Virtual Account:</span> 8808123456789012</p>
+                                        <p><span class="font-semibold">Provider:</span> VA Dummy Midtrans</p>
+                                    </div>
+                                </div>
+
+                                <p class="text-xs text-indigo-700 mt-3">Untuk mode demo, transaksi bisa langsung diproses.
+                                </p>
                             </div>
 
                             <!-- Amount Paid -->
@@ -165,6 +253,10 @@
             const printReceiptBtn = document.getElementById('print-receipt');
             const modePesananSelect = document.getElementById('mode_pesanan');
             const tableNumberContainer = document.getElementById('table-number-container');
+            const paymentMethodSelect = document.getElementById('metode_pembayaran');
+            const nonCashInfo = document.getElementById('non-cash-info');
+            const qrisInfo = document.getElementById('qris-info');
+            const bankTransferInfo = document.getElementById('bank-transfer-info');
 
             // Event listeners
             document.querySelectorAll('.menu-item').forEach(item => {
@@ -188,9 +280,11 @@
                 }
 
                 const total = parseInt(totalElement.textContent.replace(/[^\d]/g, ''));
-                const dibayar = parseInt(dibayarElement.value) || 0;
+                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethodSelect
+                    .value);
+                const dibayar = isNonCashPayment ? total : (parseInt(dibayarElement.value) || 0);
 
-                if (dibayar < total) {
+                if (!isNonCashPayment && dibayar < total) {
                     alert('Pembayaran tidak mencukupi!');
                     return;
                 }
@@ -222,7 +316,7 @@
                         },
                         body: JSON.stringify(requestData) // Stringify SELURUH objek
                     })
-                    
+
                     .then(response => response.json())
                     // Di dalam fetch success handler
                     .then(data => {
@@ -256,6 +350,9 @@
                     tableNumberContainer.classList.add('hidden');
                 }
             });
+
+            paymentMethodSelect.addEventListener('change', updatePaymentMethodUI);
+            updatePaymentMethodUI();
 
             // Functions
             function addToCart(id, name, price) {
@@ -353,6 +450,28 @@
                 calculateTotals();
             }
 
+            function updatePaymentMethodUI() {
+                const paymentMethod = paymentMethodSelect.value;
+                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethod);
+
+                nonCashInfo.classList.toggle('hidden', !isNonCashPayment);
+                qrisInfo.classList.toggle('hidden', paymentMethod !== 'QRIS');
+                bankTransferInfo.classList.toggle('hidden', paymentMethod !== 'Transfer Bank');
+
+                if (isNonCashPayment) {
+                    const total = parseInt(totalElement.textContent.replace(/[^\d]/g, '')) || 0;
+                    dibayarElement.value = total;
+                    dibayarElement.readOnly = true;
+                    dibayarElement.classList.add('bg-gray-100', 'cursor-not-allowed');
+                } else {
+                    dibayarElement.readOnly = false;
+                    dibayarElement.classList.remove('bg-gray-100', 'cursor-not-allowed');
+                }
+
+                calculateChange();
+            }
+
+
             function calculateTotals() {
                 let subtotal = 0;
 
@@ -367,12 +486,13 @@
                 taxElement.textContent = `Rp. ${number_format(tax, 0, ',', '.')}`;
                 totalElement.textContent = `Rp. ${number_format(total, 0, ',', '.')}`;
 
-                calculateChange();
+                updatePaymentMethodUI();
             }
 
             function calculateChange() {
                 const total = parseInt(totalElement.textContent.replace(/[^\d]/g, ''));
-                const dibayar = parseInt(dibayarElement.value) || 0;
+                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethodSelect.value);
+                const dibayar = isNonCashPayment ? total : (parseInt(dibayarElement.value) || 0);
                 const kembalian = dibayar - total;
 
                 kembalianElement.textContent = `Rp. ${number_format(kembalian, 0, ',', '.')}`;

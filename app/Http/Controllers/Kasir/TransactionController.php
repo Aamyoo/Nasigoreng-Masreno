@@ -96,7 +96,10 @@ class TransactionController extends Controller
 
         $pajak = $subtotal * 0.1;
         $total = $subtotal + $pajak;
-        $kembalian = $validated['dibayar'] - $total;
+        $isNonCashPayment = in_array($validated['metode_pembayaran'], ['QRIS', 'Transfer Bank', 'E-Wallet']);
+        $dibayar = $isNonCashPayment ? $total : $validated['dibayar'];
+        $kembalian = $isNonCashPayment ? 0 : $dibayar - $total;
+
 
         if ($kembalian < 0) {
             return response()->json([
@@ -120,7 +123,7 @@ class TransactionController extends Controller
                 'pajak' => $pajak,
                 'total' => $total,
                 'metode_pembayaran' => $validated['metode_pembayaran'],
-                'dibayar' => $validated['dibayar'],
+                'dibayar' => $dibayar,
                 'kembalian' => $kembalian
             ]);
 
