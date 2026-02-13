@@ -235,7 +235,7 @@
             <header class="bg-white border-b border-gray-200 px-6 py-4 shadow-sm flex-shrink-0">
                 <div class="flex items-center justify-between">
                     <div>
-                        <h1 class="text-2xl font-bold text-gray-900">@yield('page-title', 'Kasir Dashboard')</h1>
+                        <h1 class="text-2xl font-bold text-gray-900">@yield('page-title')</h1>
                         <p class="text-gray-600 mt-1">@yield('page-description', 'Kelola transaksi penjualan')</p>
                     </div>
                     <div class="flex items-center space-x-4">

@@ -158,9 +158,9 @@
                 <div class="px-6 py-4">
                     <div class="flex items-center justify-between">
                         <div>
-                            <h2 class="text-2xl font-bold text-gray-800">
+                            {{-- <h2 class="text-2xl font-bold text-gray-800">
                                 @yield('page-title', 'Dashboard')
-                            </h2>
+                            </h2> --}}
                             <p class="text-sm text-gray-500 mt-1">
                                 @yield('page-description', 'Selamat datang di panel ' . (Auth::user()->nama_lengkap ?? 'Admin'))
                             </p>
