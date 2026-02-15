@@ -33,16 +33,22 @@ class DashboardController extends Controller
         // Ambil ID kasir yang sedang login
         $kasirId = Auth::id();
 
+        // Pastikan rentang tanggal benar jika user mengisi terbalik
+        if (Carbon::parse($startDate)->gt(Carbon::parse($endDate))) {
+            [$startDate, $endDate] = [$endDate, $startDate];
+        }
+
         // Query transaksi untuk kasir yang sedang login
         $transactionsQuery = Transaction::where('id_user', $kasirId)
             ->whereBetween('tanggal', [$startDate, $endDate]);
 
         // Hitung total transaksi dan pendapatan
-        $totalTransactions = $transactionsQuery->count();
-        $totalRevenue = $transactionsQuery->sum('total') ?? 0;
+        $totalTransactions = (clone $transactionsQuery)->count();
+        $totalRevenue = (clone $transactionsQuery)->sum('total') ?? 0;
 
         // Ambil 5 transaksi terakhir
         $recentTransactions = Transaction::where('id_user', $kasirId)
+            ->whereBetween('tanggal', [$startDate, $endDate])
             ->orderBy('tanggal', 'desc')
             ->limit(5)
             ->get();

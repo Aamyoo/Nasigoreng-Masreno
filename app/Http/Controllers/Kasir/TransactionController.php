@@ -10,6 +10,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth; // PASTIKAN IMPORT INI ADA
+use Midtrans\Config;
+use Midtrans\Snap;
 
 class TransactionController extends Controller
 {
@@ -31,7 +33,9 @@ class TransactionController extends Controller
      */
     public function create()
     {
-        $menus = Menu::where('is_active', 1)->get();
+        $menus = Menu::where('is_active', 1)
+            ->where('stok', '>', 0)
+            ->get();
         return view('kasir.transaction.create', compact('menus'));
     }
 
@@ -77,41 +81,83 @@ class TransactionController extends Controller
 
         $validated = $validator->validated();
 
-        $subtotal = 0;
-        $items = [];
-
-        foreach ($validated['items'] as $item) {
-            $menu = Menu::find($item['menu_id']);
-            $itemSubtotal = $menu->harga * $item['qty'];
-            $subtotal += $itemSubtotal;
-
-            $items[] = [
-                'menu_id' => $item['menu_id'],
-                'harga' => $menu->harga,
-                'qty' => $item['qty'],
-                'subtotal' => $itemSubtotal,
-                'catatan' => ''
-            ];
-        }
-
-        $pajak = $subtotal * 0.1;
-        $total = $subtotal + $pajak;
-        $isNonCashPayment = in_array($validated['metode_pembayaran'], ['QRIS', 'Transfer Bank', 'E-Wallet']);
-        $dibayar = $isNonCashPayment ? $total : $validated['dibayar'];
-        $kembalian = $isNonCashPayment ? 0 : $dibayar - $total;
-
-
-        if ($kembalian < 0) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Pembayaran tidak mencukupi. Total: Rp. ' . number_format($total, 0, ',', '.'),
-                'errors' => ['dibayar' => ['Uang yang dibayar kurang dari total pembayaran.']]
-            ], 422);
-        }
-
         DB::beginTransaction();
         try {
-            // --- GUNAKAN CARA YANG BENAR UNTUK MENDAPATKAN ID USER ---
+            // Gabungkan qty per menu untuk mencegah duplikasi item yang sama
+            $requestedQuantities = [];
+            foreach ($validated['items'] as $item) {
+                $menuId = (int) $item['menu_id'];
+                $requestedQuantities[$menuId] = ($requestedQuantities[$menuId] ?? 0) + (int) $item['qty'];
+            }
+
+            // Lock data menu agar stok aman saat diproses bersamaan
+            $menus = Menu::whereIn('id', array_keys($requestedQuantities))
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $subtotal = 0;
+            $items = [];
+
+            foreach ($requestedQuantities as $menuId => $qty) {
+                $menu = $menus->get($menuId);
+
+                if (!$menu || !$menu->is_active) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Menu tidak tersedia atau sudah dinonaktifkan.',
+                        'errors' => ['items' => ['Terdapat menu yang sudah tidak tersedia.']]
+                    ], 422);
+                }
+
+                if ($menu->stok <= 0) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Stok menu {$menu->nama_menu} habis dan tidak dapat ditransaksikan.",
+                        'errors' => ['items' => ["Stok menu {$menu->nama_menu} habis."]]
+                    ], 422);
+                }
+
+                if ($qty > $menu->stok) {
+                    DB::rollBack();
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Stok menu {$menu->nama_menu} tidak mencukupi. Tersisa {$menu->stok}.",
+                        'errors' => ['items' => ["Jumlah pesanan {$menu->nama_menu} melebihi stok tersedia."]]
+                    ], 422);
+                }
+
+                $itemSubtotal = $menu->harga * $qty;
+                $subtotal += $itemSubtotal;
+
+                $items[] = [
+                    'menu_id' => $menuId,
+                    'harga' => $menu->harga,
+                    'qty' => $qty,
+                    'subtotal' => $itemSubtotal,
+                    'catatan' => ''
+                ];
+            }
+
+
+            $pajak = $subtotal * 0.1;
+            $total = $subtotal + $pajak;
+            $isNonCashPayment = in_array($validated['metode_pembayaran'], ['QRIS', 'Transfer Bank', 'E-Wallet']);
+            $dibayar = $isNonCashPayment ? $total : $validated['dibayar'];
+            $kembalian = $isNonCashPayment ? 0 : $dibayar - $total;
+
+            if ($kembalian < 0) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Pembayaran tidak mencukupi. Total: Rp. ' . number_format($total, 0, ',', '.'),
+                    'errors' => ['dibayar' => ['Uang yang dibayar kurang dari total pembayaran.']]
+                ], 422);
+            }
+
+
             $userId = Auth::user()->id;
 
             $transaction = Transaction::create([
@@ -130,10 +176,7 @@ class TransactionController extends Controller
             foreach ($items as $item) {
                 $item['transaksi_id'] = $transaction->id;
                 TransactionDetail::create($item);
-            }
-
-            foreach ($validated['items'] as $item) {
-                $menu = Menu::find($item['menu_id']);
+                $menu = $menus->get($item['menu_id']);
                 $menu->stok -= $item['qty'];
                 $menu->save();
             }
