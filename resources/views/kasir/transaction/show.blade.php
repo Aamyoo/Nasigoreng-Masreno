@@ -26,6 +26,14 @@
                 <div>
                     <span class="font-medium">Mode Pesanan:</span> {{ $transaction->mode_pesanan }}
                 </div>
+                @if ($transaction->metode_pembayaran === 'QRIS' && $transaction->midtrans_qr_url)
+                    <div class="col-span-2">
+                        <span class="font-medium">QR URL:</span>
+                        <a href="{{ $transaction->midtrans_qr_url }}" target="_blank" class="text-blue-600 underline break-all">
+                            {{ $transaction->midtrans_qr_url }}
+                        </a>
+                    </div>
+                @endif
             </div>
         </div>
 
