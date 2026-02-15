@@ -198,6 +198,9 @@
             <p class="total-final"><span>TOTAL:</span> <span>Rp.
                     {{ number_format($transaction->total, 0, ',', '.') }}</span></p>
             <p><span>Metode Bayar:</span> <span>{{ $transaction->metode_pembayaran }}</span></p>
+            @if ($transaction->metode_pembayaran === 'QRIS' && $transaction->midtrans_qr_url)
+                <p><span>QR URL:</span> <span style="word-break: break-all;">{{ $transaction->midtrans_qr_url }}</span></p>
+            @endif
             <p><span>Dibayar:</span> <span>Rp. {{ number_format($transaction->dibayar, 0, ',', '.') }}</span></p>
             <p><span>Kembalian:</span> <span>Rp. {{ number_format($transaction->kembalian, 0, ',', '.') }}</span></p>
         </div>

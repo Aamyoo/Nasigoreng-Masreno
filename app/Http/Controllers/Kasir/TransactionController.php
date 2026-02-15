@@ -198,7 +198,7 @@ class TransactionController extends Controller
                 ];
 
                 $snapToken = Snap::getSnapToken($params);
-                $transaction->update(['midtrans_snap_token' => $snapToken]);;
+                $transaction->update(['midtrans_snap_token' => $snapToken]);
             }
 
             DB::commit();
@@ -229,16 +229,44 @@ class TransactionController extends Controller
         $request->validate([
             'status' => 'required|in:pending,settlement,expire,cancel,deny',
             'transaction_status' => 'nullable|string|max:50',
+            'qr_url' => 'nullable|url|max:2048',
         ]);
 
+        $status = $request->string('status')->toString();
+
+        if (in_array($status, ['expire', 'cancel', 'deny'], true)) {
+            $this->rollbackAndDeleteTransaction($transaction);
+
+            return response()->json([
+                'success' => true,
+                'deleted' => true,
+                'message' => 'Pembayaran gagal/dibatalkan. Transaksi dibatalkan.',
+            ]);
+        }
+
         $transaction->update([
-            'payment_status' => $request->string('status')->toString(),
+            'payment_status' => $status,
             'midtrans_transaction_status' => $request->string('transaction_status')->toString() ?: $transaction->midtrans_transaction_status,
-            'dibayar' => $request->status === 'settlement' ? $transaction->total : $transaction->dibayar,
+            'midtrans_qr_url' => $request->string('qr_url')->toString() ?: $transaction->midtrans_qr_url,
+            'dibayar' => $status === 'settlement' ? $transaction->total : $transaction->dibayar,
             'kembalian' => 0,
         ]);
 
         return response()->json(['success' => true]);
+    }
+
+    private function rollbackAndDeleteTransaction(Transaction $transaction): void
+    {
+        DB::transaction(function () use ($transaction): void {
+            $transaction->loadMissing('details');
+
+            foreach ($transaction->details as $detail) {
+                Menu::where('id', $detail->menu_id)->increment('stok', $detail->qty);
+            }
+
+            TransactionDetail::where('transaksi_id', $transaction->id)->delete();
+            $transaction->delete();
+        });
     }
 
     public function receipt(Transaction $transaction)

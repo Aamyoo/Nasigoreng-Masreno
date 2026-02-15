@@ -26,7 +26,8 @@ class Transaction extends Model
         'payment_status',
         'midtrans_order_id',
         'midtrans_snap_token',
-        'midtrans_transaction_status'
+        'midtrans_transaction_status',
+        'midtrans_qr_url',
     ];
 
     protected $casts = [

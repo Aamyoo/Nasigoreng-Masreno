@@ -129,12 +129,12 @@
                                 <h4 class="text-sm font-semibold text-indigo-900">Informasi Pembayaran Non-Tunai</h4>
 
                                 <div id="qris-info" class="hidden mt-3">
-                                    <p class="text-xs text-indigo-700 mb-2">Scan QR dummy berikut untuk menyelesaikan
-                                        transaksi
-                                        QRIS:</p>
-                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
-                                        alt="QRIS Dummy" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
-                                    <p class="text-xs text-indigo-700 mt-2 text-center">Ref: QRIS-NM-001 (Dummy)</p>
+                                    <p class="text-xs text-indigo-700 mb-2">Scan QR untuk menyelesaikan transaksi QRIS:</p>
+                                    <img id="qris-image"
+                                        src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
+                                        alt="QRIS" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
+                                    <a id="qris-image-url" href="#" target="_blank" rel="noopener"
+                                        class="hidden text-xs text-indigo-700 mt-2 text-center underline break-all"></a>
                                 </div>
 
                                 <div id="bank-transfer-info" class="hidden mt-3 space-y-2">
@@ -232,6 +232,8 @@
             const nonCashInfo = document.getElementById('non-cash-info');
             const qrisInfo = document.getElementById('qris-info');
             const bankTransferInfo = document.getElementById('bank-transfer-info');
+            const qrisImageElement = document.getElementById('qris-image');
+            const qrisImageUrlElement = document.getElementById('qris-image-url');
 
             // Event listeners
             document.querySelectorAll('.menu-item').forEach(item => {
@@ -304,25 +306,30 @@
                         if (data.is_non_cash && data.snap_token) {
                             window.snap.pay(data.snap_token, {
                                 onSuccess: function(result) {
-                                    updateMidtransStatus(data.transaction_id, 'settlement',
-                                        result.transaction_status);
+                                    const qrUrl = extractQrUrl(result);
+                                    updateQrisPreview(qrUrl);
+                                    updateMidtransStatus(data.transaction_id, 'settlement', result.transaction_status,
+                                        qrUrl);
                                     showSuccessModal(receiptUrl);
                                 },
                                 onPending: function(result) {
-                                    updateMidtransStatus(data.transaction_id, 'pending',
-                                        result.transaction_status);
-                                    alert('Pembayaran sedang menunggu penyelesaian.');
-                                    showSuccessModal(receiptUrl);
+                                    const qrUrl = extractQrUrl(result);
+                                    updateQrisPreview(qrUrl);
+                                    updateMidtransStatus(data.transaction_id, 'pending', result.transaction_status,
+                                        qrUrl);
+                                    alert('Pembayaran sedang menunggu penyelesaian. Silakan lanjutkan pembayaran.');
                                 },
                                 onError: function(result) {
-                                    updateMidtransStatus(data.transaction_id, 'deny', result
-                                        .transaction_status);
-                                    alert('Pembayaran gagal diproses oleh Midtrans.');
+                                    const qrUrl = extractQrUrl(result);
+                                    updateMidtransStatus(data.transaction_id, 'deny', result.transaction_status,
+                                        qrUrl);
+                                    alert('Pembayaran gagal diproses oleh Midtrans. Transaksi dibatalkan.');
                                 },
-                                onClose: function() {
-                                    alert(
-                                        'Popup pembayaran ditutup sebelum transaksi selesai.'
-                                        );
+                                onClose: function(result) {
+                                    const qrUrl = extractQrUrl(result);
+                                    updateMidtransStatus(data.transaction_id, 'cancel', result?.transaction_status,
+                                        qrUrl);
+                                    alert('Popup pembayaran ditutup. Transaksi dibatalkan.');
                                 }
                             });
 
@@ -477,7 +484,31 @@
                 updateCart();
             }
 
-            function updateMidtransStatus(transactionId, status, transactionStatus) {
+
+            function extractQrUrl(result) {
+                if (!result || !Array.isArray(result.actions)) {
+                    return null;
+                }
+
+                const qrAction = result.actions.find(action =>
+                    action && action.name && action.name.toLowerCase().includes('qr') && action.url
+                );
+
+                return qrAction ? qrAction.url : null;
+            }
+
+            function updateQrisPreview(qrUrl) {
+                if (!qrUrl) {
+                    return;
+                }
+
+                qrisImageElement.src = qrUrl;
+                qrisImageUrlElement.href = qrUrl;
+                qrisImageUrlElement.textContent = qrUrl;
+                qrisImageUrlElement.classList.remove('hidden');
+            }
+
+            function updateMidtransStatus(transactionId, status, transactionStatus, qrUrl = null) {
                 fetch(`/kasir/transaction/${transactionId}/payment-status`, {
                     method: 'POST',
                     headers: {
@@ -486,7 +517,8 @@
                     },
                     body: JSON.stringify({
                         status: status,
-                        transaction_status: transactionStatus || null
+                        transaction_status: transactionStatus || null,
+                        qr_url: qrUrl || null
                     })
                 }).catch((error) => console.error('Failed updating status:', error));
             }
