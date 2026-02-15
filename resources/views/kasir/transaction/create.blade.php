@@ -133,6 +133,18 @@
                                     <img id="qris-image"
                                         src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
                                         alt="QRIS" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
+                                    <div id="qris-copy-wrapper" class="hidden mt-3">
+                                        <label for="qris-code-url" class="block text-xs font-semibold text-indigo-900 mb-1">QR_Code_Url</label>
+                                        <div class="flex items-center gap-2">
+                                            <input id="qris-code-url" type="text" readonly
+                                                class="w-full rounded border border-indigo-200 bg-white px-2 py-1 text-xs text-indigo-900"
+                                                value="">
+                                            <button id="copy-qris-url" type="button"
+                                                class="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700">
+                                                Salin
+                                            </button>
+                                        </div>
+                                    </div>
                                     <a id="qris-image-url" href="#" target="_blank" rel="noopener"
                                         class="hidden text-xs text-indigo-700 mt-2 text-center underline break-all"></a>
                                 </div>
@@ -233,7 +245,12 @@
             const qrisInfo = document.getElementById('qris-info');
             const bankTransferInfo = document.getElementById('bank-transfer-info');
             const qrisImageElement = document.getElementById('qris-image');
+            const qrisCopyWrapper = document.getElementById('qris-copy-wrapper');
+            const qrisCodeUrlElement = document.getElementById('qris-code-url');
+            const copyQrisUrlButton = document.getElementById('copy-qris-url');
             const qrisImageUrlElement = document.getElementById('qris-image-url');
+
+            copyQrisUrlButton.addEventListener('click', copyQrisUrl);
 
             // Event listeners
             document.querySelectorAll('.menu-item').forEach(item => {
@@ -463,6 +480,11 @@
                 qrisInfo.classList.toggle('hidden', paymentMethod !== 'QRIS');
                 bankTransferInfo.classList.toggle('hidden', paymentMethod !== 'Transfer Bank');
 
+                if (paymentMethod !== 'QRIS') {
+                    qrisCopyWrapper.classList.add('hidden');
+                    qrisCodeUrlElement.value = '';
+                }
+
                 if (isNonCashPayment) {
                     const total = parseInt(totalElement.textContent.replace(/[^\d]/g, '')) || 0;
                     dibayarElement.value = total;
@@ -506,6 +528,35 @@
                 qrisImageUrlElement.href = qrUrl;
                 qrisImageUrlElement.textContent = qrUrl;
                 qrisImageUrlElement.classList.remove('hidden');
+                qrisCodeUrlElement.value = qrUrl;
+                qrisCopyWrapper.classList.remove('hidden');
+            }
+
+            function copyQrisUrl() {
+                if (!qrisCodeUrlElement.value) {
+                    return;
+                }
+
+                const textToCopy = qrisCodeUrlElement.value;
+
+                if (navigator.clipboard && window.isSecureContext) {
+                    navigator.clipboard.writeText(textToCopy)
+                        .then(() => alert('QR_Code_Url berhasil disalin.'))
+                        .catch(() => fallbackCopyToClipboard(textToCopy));
+
+                    return;
+                }
+
+                fallbackCopyToClipboard(textToCopy);
+            }
+
+            function fallbackCopyToClipboard(text) {
+                qrisCodeUrlElement.focus();
+                qrisCodeUrlElement.select();
+                qrisCodeUrlElement.setSelectionRange(0, 99999);
+
+                const copied = document.execCommand('copy');
+                alert(copied ? 'QR_Code_Url berhasil disalin.' : 'Gagal menyalin QR_Code_Url. Silakan salin manual.');
             }
 
             function updateMidtransStatus(transactionId, status, transactionStatus, qrUrl = null) {
