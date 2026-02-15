@@ -154,35 +154,7 @@
                                 </p>
                             </div>
 
-                            <div id="non-cash-info"
-                                class="hidden mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                                <h4 class="text-sm font-semibold text-indigo-900">Informasi Pembayaran Non-Tunai</h4>
 
-                                <div id="qris-info" class="hidden mt-3">
-                                    <p class="text-xs text-indigo-700 mb-2">Scan QR dummy berikut untuk menyelesaikan
-                                        transaksi
-                                        QRIS:</p>
-                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
-                                        alt="QRIS Dummy" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
-                                    <p class="text-xs text-indigo-700 mt-2 text-center">Ref: QRIS-NM-001 (Dummy)</p>
-                                </div>
-
-                                <div id="bank-transfer-info" class="hidden mt-3 space-y-2">
-                                    <p class="text-xs text-indigo-700">Transfer ke rekening dummy berikut:</p>
-                                    <div class="text-sm text-indigo-900 bg-white rounded border p-2">
-                                        <p><span class="font-semibold">Bank:</span> Bank Nasigoreng</p>
-                                        <p><span class="font-semibold">No. Rekening:</span> 1234567890</p>
-                                        <p><span class="font-semibold">Nama:</span> PT Nasigoreng Masreno</p>
-                                    </div>
-                                    <div class="text-sm text-indigo-900 bg-white rounded border p-2">
-                                        <p><span class="font-semibold">Virtual Account:</span> 8808123456789012</p>
-                                        <p><span class="font-semibold">Provider:</span> VA Dummy Midtrans</p>
-                                    </div>
-                                </div>
-
-                                <p class="text-xs text-indigo-700 mt-3">Untuk mode demo, transaksi bisa langsung diproses.
-                                </p>
-                            </div>
 
                             <!-- Amount Paid -->
                             <div class="mb-4">
@@ -234,6 +206,9 @@
             </div>
         </div>
     </div>
+
+    <script type="text/javascript" src="https://app.sandbox.midtrans.com/snap/snap.js"
+        data-client-key="{{ config('midtrans.clientKey') }}"></script>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
@@ -320,18 +295,41 @@
                     .then(response => response.json())
                     // Di dalam fetch success handler
                     .then(data => {
-                        if (data.success) {
-                            // Tampilkan modal sukses dengan link ke receipt
-                            document.getElementById('success-modal').classList.remove('hidden');
-                            document.getElementById('print-receipt').href =
-                                `/kasir/transaction/${data.transaction_id}/receipt`;
-
-                            // Reset form
-                            document.getElementById('transaction-form').reset();
-                            updateCart();
-                        } else {
+                        if (!data.success) {
                             alert(data.message || 'Terjadi kesalahan saat memproses transaksi');
+                            return;
                         }
+                        const receiptUrl = `/kasir/transaction/${data.transaction_id}/receipt`;
+
+                        if (data.is_non_cash && data.snap_token) {
+                            window.snap.pay(data.snap_token, {
+                                onSuccess: function(result) {
+                                    updateMidtransStatus(data.transaction_id, 'settlement',
+                                        result.transaction_status);
+                                    showSuccessModal(receiptUrl);
+                                },
+                                onPending: function(result) {
+                                    updateMidtransStatus(data.transaction_id, 'pending',
+                                        result.transaction_status);
+                                    alert('Pembayaran sedang menunggu penyelesaian.');
+                                    showSuccessModal(receiptUrl);
+                                },
+                                onError: function(result) {
+                                    updateMidtransStatus(data.transaction_id, 'deny', result
+                                        .transaction_status);
+                                    alert('Pembayaran gagal diproses oleh Midtrans.');
+                                },
+                                onClose: function() {
+                                    alert(
+                                        'Popup pembayaran ditutup sebelum transaksi selesai.'
+                                        );
+                                }
+                            });
+
+                            return;
+                        }
+
+                        showSuccessModal(receiptUrl);
                     })
                     .catch(error => {
                         console.error('Error:', error);
@@ -471,6 +469,27 @@
                 calculateChange();
             }
 
+            function showSuccessModal(receiptUrl) {
+                document.getElementById('success-modal').classList.remove('hidden');
+                document.getElementById('print-receipt').href = receiptUrl;
+                document.getElementById('transaction-form').reset();
+                cart = [];
+                updateCart();
+            }
+
+            function updateMidtransStatus(transactionId, status, transactionStatus) {
+                fetch(`/kasir/transaction/${transactionId}/payment-status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                    },
+                    body: JSON.stringify({
+                        status: status,
+                        transaction_status: transactionStatus || null
+                    })
+                }).catch((error) => console.error('Failed updating status:', error));
+            }
 
             function calculateTotals() {
                 let subtotal = 0;

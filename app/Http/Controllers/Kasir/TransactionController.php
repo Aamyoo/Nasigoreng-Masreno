@@ -6,10 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Menu;
 use App\Models\Transaction;
 use App\Models\TransactionDetail;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Auth; // PASTIKAN IMPORT INI ADA
 use Midtrans\Config;
 use Midtrans\Snap;
 
@@ -21,7 +22,7 @@ class TransactionController extends Controller
     public function index()
     {
         // Ambil hanya transaksi milik kasir yang sedang login
-        $transactions = Transaction::where('id_user', Auth::user()->id)
+        $transactions = Transaction::where('id_user', Auth::id())
             ->orderBy('tanggal', 'desc')
             ->get();
 
@@ -36,30 +37,16 @@ class TransactionController extends Controller
         $menus = Menu::where('is_active', 1)
             ->where('stok', '>', 0)
             ->get();
+
         return view('kasir.transaction.create', compact('menus'));
     }
 
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
-        $customMessages = [
-            'items.required' => 'Keranjang belanja tidak boleh kosong. Silakan pilih menu terlebih dahulu.',
-            'items.array' => 'Format item keranjang tidak valid.',
-            'items.*.menu_id.required' => 'ID menu harus dipilih.',
-            'items.*.menu_id.exists' => 'Menu yang dipilih tidak tersedia.',
-            'items.*.qty.required' => 'Jumlah item harus diisi.',
-            'items.*.qty.integer' => 'Jumlah item harus berupa angka.',
-            'items.*.qty.min' => 'Jumlah item minimal 1.',
-            'metode_pembayaran.required' => 'Metode pembayaran harus dipilih.',
-            'metode_pembayaran.in' => 'Metode pembayaran tidak valid.',
-            'mode_pesanan.required' => 'Jenis pesanan harus dipilih.',
-            'mode_pesanan.in' => 'Jenis pesanan tidak valid.',
-            'dibayar.required' => 'Jumlah dibayar harus diisi.',
-            'dibayar.integer' => 'Jumlah dibayar harus berupa angka.',
-            'dibayar.min' => 'Jumlah dibayar tidak boleh negatif.',
-        ];
+
 
         $validator = Validator::make($request->all(), [
             'items' => 'required|array|min:1',
@@ -68,22 +55,22 @@ class TransactionController extends Controller
             'metode_pembayaran' => 'required|in:Tunai,QRIS,Transfer Bank,E-Wallet',
             'dibayar' => 'required|integer|min:0',
             'nomor_meja' => 'nullable|string|max:10',
-            'mode_pesanan' => 'required|in:Dine In,Take Away'
-        ], $customMessages);
+            'mode_pesanan' => 'required|in:Dine In,Take Away',
+        ]);
 
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Validasi gagal. Periksa kembali input Anda.',
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
             ], 422);
         }
 
         $validated = $validator->validated();
 
         DB::beginTransaction();
+
         try {
-            // Gabungkan qty per menu untuk mencegah duplikasi item yang sama
             $requestedQuantities = [];
             foreach ($validated['items'] as $item) {
                 $menuId = (int) $item['menu_id'];
@@ -102,21 +89,11 @@ class TransactionController extends Controller
             foreach ($requestedQuantities as $menuId => $qty) {
                 $menu = $menus->get($menuId);
 
-                if (!$menu || !$menu->is_active) {
+                if (! $menu || ! $menu->is_active) {
                     DB::rollBack();
                     return response()->json([
                         'success' => false,
                         'message' => 'Menu tidak tersedia atau sudah dinonaktifkan.',
-                        'errors' => ['items' => ['Terdapat menu yang sudah tidak tersedia.']]
-                    ], 422);
-                }
-
-                if ($menu->stok <= 0) {
-                    DB::rollBack();
-                    return response()->json([
-                        'success' => false,
-                        'message' => "Stok menu {$menu->nama_menu} habis dan tidak dapat ditransaksikan.",
-                        'errors' => ['items' => ["Stok menu {$menu->nama_menu} habis."]]
                     ], 422);
                 }
 
@@ -125,7 +102,6 @@ class TransactionController extends Controller
                     return response()->json([
                         'success' => false,
                         'message' => "Stok menu {$menu->nama_menu} tidak mencukupi. Tersisa {$menu->stok}.",
-                        'errors' => ['items' => ["Jumlah pesanan {$menu->nama_menu} melebihi stok tersedia."]]
                     ], 422);
                 }
 
@@ -137,31 +113,31 @@ class TransactionController extends Controller
                     'harga' => $menu->harga,
                     'qty' => $qty,
                     'subtotal' => $itemSubtotal,
-                    'catatan' => ''
+                    'catatan' => '',
                 ];
             }
 
 
-            $pajak = $subtotal * 0.1;
+            $pajak = (int) round($subtotal * 0.1);
             $total = $subtotal + $pajak;
-            $isNonCashPayment = in_array($validated['metode_pembayaran'], ['QRIS', 'Transfer Bank', 'E-Wallet']);
-            $dibayar = $isNonCashPayment ? $total : $validated['dibayar'];
-            $kembalian = $isNonCashPayment ? 0 : $dibayar - $total;
+            $isNonCash = in_array($validated['metode_pembayaran'], ['QRIS', 'Transfer Bank', 'E-Wallet'], true);
+            $dibayar = $isNonCash ? 0 : (int) $validated['dibayar'];
+            $kembalian = $isNonCash ? 0 : $dibayar - $total;
 
-            if ($kembalian < 0) {
+            if (! $isNonCash && $kembalian < 0) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
-                    'message' => 'Pembayaran tidak mencukupi. Total: Rp. ' . number_format($total, 0, ',', '.'),
-                    'errors' => ['dibayar' => ['Uang yang dibayar kurang dari total pembayaran.']]
+                    'message' => 'Pembayaran tidak mencukupi.',
                 ], 422);
             }
 
 
-            $userId = Auth::user()->id;
+            $orderId = 'TRX-' . now()->format('YmdHis') . '-' . strtoupper(substr(uniqid(), -6));
+
 
             $transaction = Transaction::create([
-                'id_user' => $userId,
+                'id_user' => Auth::id(),
                 'tanggal' => now(),
                 'nomor_meja' => $validated['nomor_meja'] ?? null,
                 'mode_pesanan' => $validated['mode_pesanan'],
@@ -170,43 +146,104 @@ class TransactionController extends Controller
                 'total' => $total,
                 'metode_pembayaran' => $validated['metode_pembayaran'],
                 'dibayar' => $dibayar,
-                'kembalian' => $kembalian
+                'kembalian' => $kembalian,
+                'payment_status' => $isNonCash ? 'pending' : 'settlement',
+                'midtrans_order_id' => $isNonCash ? $orderId : null,
+                'midtrans_transaction_status' => $isNonCash ? 'pending' : null,
             ]);
 
             foreach ($items as $item) {
-                $item['transaksi_id'] = $transaction->id;
-                TransactionDetail::create($item);
+                TransactionDetail::create($item + ['transaksi_id' => $transaction->id]);
                 $menu = $menus->get($item['menu_id']);
-                $menu->stok -= $item['qty'];
-                $menu->save();
+                $menu->decrement('stok', $item['qty']);
+            }
+
+            $snapToken = null;
+            if ($isNonCash) {
+                Config::$serverKey = config('midtrans.serverKey');
+                Config::$clientKey = config('midtrans.clientKey');
+                Config::$isProduction = (bool) config('midtrans.isProduction', false);
+                Config::$isSanitized = (bool) config('midtrans.isSanitized', true);
+                Config::$is3ds = (bool) config('midtrans.is3ds', true);
+
+                $lineItems = [];
+                foreach ($items as $item) {
+                    $menu = $menus->get($item['menu_id']);
+                    $lineItems[] = [
+                        'id' => (string) $item['menu_id'],
+                        'price' => (int) $item['harga'],
+                        'quantity' => (int) $item['qty'],
+                        'name' => $menu->nama_menu,
+                    ];
+                }
+
+                $lineItems[] = [
+                    'id' => 'tax',
+                    'price' => (int) $pajak,
+                    'quantity' => 1,
+                    'name' => 'Pajak 10%',
+                ];
+
+                $params = [
+                    'transaction_details' => [
+                        'order_id' => $orderId,
+                        'gross_amount' => (int) $total,
+                    ],
+                    'item_details' => $lineItems,
+                    'customer_details' => [
+                        'first_name' => Auth::user()->nama_lengkap ?? Auth::user()->name ?? Auth::user()->username,
+                        'email' => Auth::user()->email,
+                    ],
+                    'enabled_payments' => ['qris', 'bank_transfer', 'gopay', 'shopeepay'],
+                ];
+
+                $snapToken = Snap::getSnapToken($params);
+                $transaction->update(['midtrans_snap_token' => $snapToken]);;
             }
 
             DB::commit();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Transaksi berhasil!',
-                'transaction_id' => $transaction->id
+                'message' => 'Transaksi berhasil dibuat.',
+                'transaction_id' => $transaction->id,
+                'snap_token' => $snapToken,
+                'is_non_cash' => $isNonCash,
             ]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             DB::rollBack();
 
             return response()->json([
                 'success' => false,
                 'message' => 'Terjadi kesalahan server: ' . $e->getMessage(),
-                'errors' => ['server' => [$e->getMessage()]]
             ], 500);
         }
     }
 
-    /**
-     * Display the specified transaction's receipt.
-     */
+    public function updatePaymentStatus(Request $request, Transaction $transaction): JsonResponse
+    {
+        if ($transaction->id_user !== Auth::id()) {
+            abort(403, 'Unauthorized action.');
+        }
+
+        $request->validate([
+            'status' => 'required|in:pending,settlement,expire,cancel,deny',
+            'transaction_status' => 'nullable|string|max:50',
+        ]);
+
+        $transaction->update([
+            'payment_status' => $request->string('status')->toString(),
+            'midtrans_transaction_status' => $request->string('transaction_status')->toString() ?: $transaction->midtrans_transaction_status,
+            'dibayar' => $request->status === 'settlement' ? $transaction->total : $transaction->dibayar,
+            'kembalian' => 0,
+        ]);
+
+        return response()->json(['success' => true]);
+    }
+
     public function receipt(Transaction $transaction)
     {
-        // --- INI ADALAH BARIS YANG MENYEBABKAN ERROR (SEBELUM DIPERBAIKI) ---
-        // --- GUNAKAN CARA YANG BENAR UNTUK MEMBANDINGKAN ID USER ---
-        if ($transaction->id_user !== Auth::user()->id) {
+        if ($transaction->id_user !== Auth::id()) {
             abort(403, 'Unauthorized action.');
         }
 
@@ -221,7 +258,7 @@ class TransactionController extends Controller
     public function show(Transaction $transaction)
     {
         // Pastikan kasir hanya bisa lihat transaksinya sendiri
-        if ($transaction->id_user !== Auth::user()->id) {
+        if ($transaction->id_user !== Auth::id()) {
             abort(403, 'Unauthorized action.');
         }
 

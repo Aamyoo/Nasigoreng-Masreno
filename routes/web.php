@@ -10,6 +10,7 @@ use App\Http\Controllers\Kasir\DashboardController as KasirDashboardController;
 use App\Http\Controllers\Kasir\TransactionController;
 use App\Http\Controllers\Kasir\ReportController as KasirReportController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\MidtransCallbackController;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\ProfileController;
@@ -78,6 +79,7 @@ Route::middleware(['auth', 'kasir'])->prefix('kasir')->name('kasir.')->group(fun
     // Transaction
     Route::get('/transaction', [TransactionController::class, 'create'])->name('transaction.create');
     Route::post('/transaction', [TransactionController::class, 'store'])->name('transaction.store');
+    Route::post('/transaction/{transaction}/payment-status', [TransactionController::class, 'updatePaymentStatus'])->name('transaction.payment-status');
     Route::get('/transaction/{transaction}/receipt', [TransactionController::class, 'receipt'])->name('transaction.receipt');
     // Reports
     Route::get('/reports', [KasirReportController::class, 'index'])->name('reports');
@@ -87,6 +89,7 @@ Route::middleware(['auth', 'kasir'])->prefix('kasir')->name('kasir.')->group(fun
     Route::get('/reports/today-print', [KasirReportController::class, 'todayReport'])->name('reports.today-print');
 });
 
+Route::post('/midtrans/notification', MidtransCallbackController::class)->name('midtrans.notification');
 
 // Redirect based on role after login
 // Route::get('/redirect', function () {

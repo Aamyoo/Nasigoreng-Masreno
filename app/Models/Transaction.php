@@ -8,10 +8,10 @@ use Illuminate\Database\Eloquent\Model;
 class Transaction extends Model
 {
     use HasFactory;
-    
+
     protected $table = 'transaksi';
     protected $primaryKey = 'id';
-    
+
     protected $fillable = [
         'id_user',
         'tanggal',
@@ -22,9 +22,13 @@ class Transaction extends Model
         'total',
         'metode_pembayaran',
         'dibayar',
-        'kembalian'
+        'kembalian',
+        'payment_status',
+        'midtrans_order_id',
+        'midtrans_snap_token',
+        'midtrans_transaction_status'
     ];
-    
+
     protected $casts = [
         'tanggal' => 'datetime',
         'subtotal' => 'integer',
@@ -33,12 +37,12 @@ class Transaction extends Model
         'dibayar' => 'integer',
         'kembalian' => 'integer'
     ];
-    
+
     public function user()
     {
         return $this->belongsTo(User::class, 'id_user');
     }
-    
+
     public function details()
     {
         return $this->hasMany(TransactionDetail::class, 'transaksi_id');
