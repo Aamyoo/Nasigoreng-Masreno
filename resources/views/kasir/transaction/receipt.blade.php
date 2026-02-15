@@ -198,6 +198,12 @@
             <p class="total-final"><span>TOTAL:</span> <span>Rp.
                     {{ number_format($transaction->total, 0, ',', '.') }}</span></p>
             <p><span>Metode Bayar:</span> <span>{{ $transaction->metode_pembayaran }}</span></p>
+            @if ($transaction->metode_pembayaran === 'QRIS' && $transaction->midtrans_qr_code_url)
+                <p style="display:block;"><span>QR URL:</span><br><span style="word-break: break-all; font-size: 11px;">{{ $transaction->midtrans_qr_code_url }}</span></p>
+                <p style="text-align:center; margin:8px 0;">
+                    <img src="{{ $transaction->midtrans_qr_code_url }}" alt="QRIS" style="max-width:140px; border:1px solid #ddd; padding:4px;">
+                </p>
+            @endif
             <p><span>Dibayar:</span> <span>Rp. {{ number_format($transaction->dibayar, 0, ',', '.') }}</span></p>
             <p><span>Kembalian:</span> <span>Rp. {{ number_format($transaction->kembalian, 0, ',', '.') }}</span></p>
         </div>
@@ -213,6 +219,30 @@
         <button class="print-btn" onclick="window.print()">🖨️ Cetak Struk</button>
         <a href="{{ route('kasir.transaction.create') }}" class="back-btn">⬅️ Kembali ke Transaksi</a>
     </div>
+
+
+    <script>
+        const params = new URLSearchParams(window.location.search);
+        const autoPrint = params.get('autoprint') === '1';
+        const closeAfter = params.get('close_after') === '1';
+
+        if (autoPrint) {
+            window.addEventListener('load', () => {
+                window.print();
+            });
+        }
+
+        window.addEventListener('afterprint', () => {
+            if (closeAfter) {
+                if (window.opener && !window.opener.closed) {
+                    window.close();
+                    return;
+                }
+
+                window.location.href = '{{ route('kasir.transaction.create') }}';
+            }
+        });
+    </script>
 
 </body>
 

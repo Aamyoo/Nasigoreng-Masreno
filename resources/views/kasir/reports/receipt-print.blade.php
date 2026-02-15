@@ -60,6 +60,10 @@
             <div class="row"><span>Pajak (10%)</span><span>Rp {{ number_format($transaction->pajak, 0, ',', '.') }}</span></div>
             <div class="row" style="font-weight: bold;"><span>Total</span><span>Rp {{ number_format($transaction->total, 0, ',', '.') }}</span></div>
             <div class="row"><span>Bayar</span><span>{{ $transaction->metode_pembayaran }}</span></div>
+            @if($transaction->metode_pembayaran === 'QRIS' && $transaction->midtrans_qr_code_url)
+            <div style="margin:6px 0; word-break: break-all; font-size: 10px;">QR URL: {{ $transaction->midtrans_qr_code_url }}</div>
+            <div class="text-center" style="margin-bottom:6px;"><img src="{{ $transaction->midtrans_qr_code_url }}" alt="QRIS" style="max-width:110px; border:1px solid #ccc; padding:3px;"></div>
+            @endif
             <div class="row"><span>Dibayar</span><span>Rp {{ number_format($transaction->dibayar, 0, ',', '.') }}</span></div>
             <div class="row"><span>Kembalian</span><span>Rp {{ number_format($transaction->kembalian, 0, ',', '.') }}</span></div>
         </div>
@@ -73,8 +77,18 @@
         <button type="button" onclick="window.close()" style="padding: 8px 16px; cursor: pointer; margin-left: 8px;">Tutup</button>
     </div>
     <script>
-        // Optional: auto-print when opened in popup
-        if (window.opener) { window.onload = function() { window.print(); }; }
+        const params = new URLSearchParams(window.location.search);
+        const autoPrint = window.opener || params.get('autoprint') === '1';
+
+        if (autoPrint) {
+            window.onload = function() { window.print(); };
+        }
+
+        window.addEventListener('afterprint', function () {
+            if (window.opener && !window.opener.closed) {
+                window.close();
+            }
+        });
     </script>
 </body>
 </html>

@@ -132,9 +132,9 @@
                                     <p class="text-xs text-indigo-700 mb-2">Scan QR dummy berikut untuk menyelesaikan
                                         transaksi
                                         QRIS:</p>
-                                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
+                                    <img id="qris-preview-image" src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
                                         alt="QRIS Dummy" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
-                                    <p class="text-xs text-indigo-700 mt-2 text-center">Ref: QRIS-NM-001 (Dummy)</p>
+                                    <p id="qris-preview-ref" class="text-xs text-indigo-700 mt-2 text-center">Ref: QRIS-NM-001 (Dummy)</p>
                                 </div>
 
                                 <div id="bank-transfer-info" class="hidden mt-3 space-y-2">
@@ -199,7 +199,7 @@
                 <div class="items-center px-4 py-3">
                     <button id="close-modal"
                         class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300">Tutup</button>
-                    <a id="print-receipt" href="#" target="_blank"
+                    <a id="print-receipt" href="#"
                         class="block mt-2 px-4 py-2 bg-blue-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-300">Cetak
                         Struk</a>
                 </div>
@@ -246,7 +246,7 @@
 
             dibayarElement.addEventListener('input', calculateChange);
 
-            transactionForm.addEventListener('submit', function(e) {
+            transactionForm.addEventListener('submit', async function(e) {
                 e.preventDefault();
 
                 if (cart.length === 0) {
@@ -255,90 +255,104 @@
                 }
 
                 const total = parseInt(totalElement.textContent.replace(/[^\d]/g, ''));
-                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethodSelect
-                    .value);
+                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethodSelect.value);
                 const dibayar = isNonCashPayment ? total : (parseInt(dibayarElement.value) || 0);
 
                 if (!isNonCashPayment && dibayar < total) {
                     alert('Pembayaran tidak mencukupi!');
                     return;
                 }
-                // --- PERBAIKAN DIMULAI DI SINI ---
 
-                // 1. Siapkan data sebagai objek JavaScript
                 const items = cart.map(item => ({
                     menu_id: item.id,
                     qty: item.quantity
                 }));
 
                 const requestData = {
-                    items: items, // Ini adalah array, bukan string
+                    items,
                     mode_pesanan: modePesananSelect.value,
                     metode_pembayaran: document.getElementById('metode_pembayaran').value,
-                    dibayar: dibayar
+                    dibayar
                 };
 
                 if (modePesananSelect.value === 'Dine In') {
                     requestData.nomor_meja = document.getElementById('nomor_meja').value;
                 }
 
-                // 2. Kirim menggunakan fetch dengan header JSON
-                fetch('{{ route('kasir.transaction.store') }}', {
+                try {
+                    const response = await fetch('{{ route('kasir.transaction.store') }}', {
                         method: 'POST',
                         headers: {
-                            'Content-Type': 'application/json', // Penting: beritahu server bahwa ini JSON
-                            'X-CSRF-TOKEN': '{{ csrf_token() }}' // CSRF token tetap dikirim
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{ csrf_token() }}'
                         },
-                        body: JSON.stringify(requestData) // Stringify SELURUH objek
-                    })
+                        body: JSON.stringify(requestData)
+                    });
 
-                    .then(response => response.json())
-                    // Di dalam fetch success handler
-                    .then(data => {
-                        if (!data.success) {
-                            alert(data.message || 'Terjadi kesalahan saat memproses transaksi');
-                            return;
-                        }
-                        const receiptUrl = `/kasir/transaction/${data.transaction_id}/receipt`;
+                    const data = await response.json();
+                    if (!data.success) {
+                        alert(data.message || 'Terjadi kesalahan saat memproses transaksi');
+                        return;
+                    }
 
-                        if (data.is_non_cash && data.snap_token) {
-                            window.snap.pay(data.snap_token, {
-                                onSuccess: function(result) {
-                                    updateMidtransStatus(data.transaction_id, 'settlement',
-                                        result.transaction_status);
-                                    showSuccessModal(receiptUrl);
+                    if (data.is_non_cash && data.snap_token) {
+                        const finalize = async (paymentStatus, result) => {
+                            const finalizeResponse = await fetch('{{ route('kasir.transaction.finalize-payment') }}', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
                                 },
-                                onPending: function(result) {
-                                    updateMidtransStatus(data.transaction_id, 'pending',
-                                        result.transaction_status);
-                                    alert('Pembayaran sedang menunggu penyelesaian.');
-                                    showSuccessModal(receiptUrl);
-                                },
-                                onError: function(result) {
-                                    updateMidtransStatus(data.transaction_id, 'deny', result
-                                        .transaction_status);
-                                    alert('Pembayaran gagal diproses oleh Midtrans.');
-                                },
-                                onClose: function() {
-                                    alert(
-                                        'Popup pembayaran ditutup sebelum transaksi selesai.'
-                                        );
-                                }
+                                body: JSON.stringify({
+                                    ...requestData,
+                                    payment_status: paymentStatus,
+                                    midtrans_order_id: data.order_id,
+                                    midtrans_snap_token: data.snap_token,
+                                    midtrans_transaction_status: result?.transaction_status || paymentStatus,
+                                    midtrans_qr_code_url: getQrCodeUrl(result)
+                                })
                             });
 
-                            return;
-                        }
+                            const finalizeData = await finalizeResponse.json();
+                            if (!finalizeData.success) {
+                                alert(finalizeData.message || 'Gagal menyimpan transaksi.');
+                                return;
+                            }
 
-                        showSuccessModal(receiptUrl);
-                    })
-                    .catch(error => {
-                        console.error('Error:', error);
-                        alert('Terjadi kesalahan saat memproses transaksi');
-                    });
+                            const receiptUrl = `/kasir/transaction/${finalizeData.transaction_id}/receipt?autoprint=1&close_after=1`;
+                            showSuccessModal(receiptUrl);
+                        };
+
+                        window.snap.pay(data.snap_token, {
+                            onSuccess: function(result) {
+                                finalize('settlement', result);
+                            },
+                            onPending: function(result) {
+                                finalize('pending', result);
+                                alert('Pembayaran sedang menunggu penyelesaian.');
+                            },
+                            onError: function() {
+                                alert('Pembayaran gagal diproses oleh Midtrans. Transaksi tidak disimpan.');
+                            },
+                            onClose: function() {
+                                alert('Popup pembayaran ditutup sebelum transaksi selesai. Transaksi tidak disimpan.');
+                            }
+                        });
+
+                        return;
+                    }
+
+                    const receiptUrl = `/kasir/transaction/${data.transaction_id}/receipt?autoprint=1&close_after=1`;
+                    showSuccessModal(receiptUrl);
+                } catch (error) {
+                    console.error('Error:', error);
+                    alert('Terjadi kesalahan saat memproses transaksi');
+                }
             });
 
             closeModalBtn.addEventListener('click', function() {
                 successModal.classList.add('hidden');
+                resetQrisPreview();
             });
 
             modePesananSelect.addEventListener('change', function() {
@@ -475,20 +489,39 @@
                 document.getElementById('transaction-form').reset();
                 cart = [];
                 updateCart();
+                resetQrisPreview();
             }
 
-            function updateMidtransStatus(transactionId, status, transactionStatus) {
-                fetch(`/kasir/transaction/${transactionId}/payment-status`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({
-                        status: status,
-                        transaction_status: transactionStatus || null
-                    })
-                }).catch((error) => console.error('Failed updating status:', error));
+            printReceiptBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                const receiptWindow = window.open(this.href, 'receipt_window', 'width=420,height=780');
+                if (!receiptWindow) {
+                    window.location.href = this.href;
+                }
+            });
+
+            function getQrCodeUrl(result) {
+                if (!result || !Array.isArray(result.actions)) {
+                    return null;
+                }
+
+                const qrAction = result.actions.find(action => action.name === 'generate-qr-code' || action.name === 'qr-code');
+                const qrUrl = qrAction?.url || null;
+                if (qrUrl) {
+                    const qrisImage = document.getElementById('qris-preview-image');
+                    const qrisRef = document.getElementById('qris-preview-ref');
+                    qrisImage.src = qrUrl;
+                    qrisRef.textContent = qrUrl;
+                }
+
+                return qrUrl;
+            }
+
+            function resetQrisPreview() {
+                const qrisImage = document.getElementById('qris-preview-image');
+                const qrisRef = document.getElementById('qris-preview-ref');
+                qrisImage.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY';
+                qrisRef.textContent = 'Ref: QRIS-NM-001 (Dummy)';
             }
 
             function calculateTotals() {

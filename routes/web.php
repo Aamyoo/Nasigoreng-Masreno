@@ -80,6 +80,7 @@ Route::middleware(['auth', 'kasir'])->prefix('kasir')->name('kasir.')->group(fun
     Route::get('/transaction', [TransactionController::class, 'create'])->name('transaction.create');
     Route::post('/transaction', [TransactionController::class, 'store'])->name('transaction.store');
     Route::post('/transaction/{transaction}/payment-status', [TransactionController::class, 'updatePaymentStatus'])->name('transaction.payment-status');
+    Route::post('/transaction/finalize-payment', [TransactionController::class, 'finalizePayment'])->name('transaction.finalize-payment');
     Route::get('/transaction/{transaction}/receipt', [TransactionController::class, 'receipt'])->name('transaction.receipt');
     // Reports
     Route::get('/reports', [KasirReportController::class, 'index'])->name('reports');

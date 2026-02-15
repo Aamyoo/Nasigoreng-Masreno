@@ -46,8 +46,6 @@ class TransactionController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-
-
         $validator = Validator::make($request->all(), [
             'items' => 'required|array|min:1',
             'items.*.menu_id' => 'required|integer|exists:menu,id',
@@ -68,8 +66,6 @@ class TransactionController extends Controller
 
         $validated = $validator->validated();
 
-        DB::beginTransaction();
-
         try {
             $requestedQuantities = [];
             foreach ($validated['items'] as $item) {
@@ -77,9 +73,7 @@ class TransactionController extends Controller
                 $requestedQuantities[$menuId] = ($requestedQuantities[$menuId] ?? 0) + (int) $item['qty'];
             }
 
-            // Lock data menu agar stok aman saat diproses bersamaan
             $menus = Menu::whereIn('id', array_keys($requestedQuantities))
-                ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
 
@@ -90,7 +84,6 @@ class TransactionController extends Controller
                 $menu = $menus->get($menuId);
 
                 if (! $menu || ! $menu->is_active) {
-                    DB::rollBack();
                     return response()->json([
                         'success' => false,
                         'message' => 'Menu tidak tersedia atau sudah dinonaktifkan.',
@@ -98,7 +91,6 @@ class TransactionController extends Controller
                 }
 
                 if ($qty > $menu->stok) {
-                    DB::rollBack();
                     return response()->json([
                         'success' => false,
                         'message' => "Stok menu {$menu->nama_menu} tidak mencukupi. Tersisa {$menu->stok}.",
@@ -125,41 +117,16 @@ class TransactionController extends Controller
             $kembalian = $isNonCash ? 0 : $dibayar - $total;
 
             if (! $isNonCash && $kembalian < 0) {
-                DB::rollBack();
                 return response()->json([
                     'success' => false,
                     'message' => 'Pembayaran tidak mencukupi.',
                 ], 422);
             }
 
-
-            $orderId = 'TRX-' . now()->format('YmdHis') . '-' . strtoupper(substr(uniqid(), -6));
-
-
-            $transaction = Transaction::create([
-                'id_user' => Auth::id(),
-                'tanggal' => now(),
-                'nomor_meja' => $validated['nomor_meja'] ?? null,
-                'mode_pesanan' => $validated['mode_pesanan'],
-                'subtotal' => $subtotal,
-                'pajak' => $pajak,
-                'total' => $total,
-                'metode_pembayaran' => $validated['metode_pembayaran'],
-                'dibayar' => $dibayar,
-                'kembalian' => $kembalian,
-                'payment_status' => $isNonCash ? 'pending' : 'settlement',
-                'midtrans_order_id' => $isNonCash ? $orderId : null,
-                'midtrans_transaction_status' => $isNonCash ? 'pending' : null,
-            ]);
-
-            foreach ($items as $item) {
-                TransactionDetail::create($item + ['transaksi_id' => $transaction->id]);
-                $menu = $menus->get($item['menu_id']);
-                $menu->decrement('stok', $item['qty']);
-            }
-
             $snapToken = null;
             if ($isNonCash) {
+                $orderId = 'TRX-' . now()->format('YmdHis') . '-' . strtoupper(substr(uniqid(), -6));
+
                 Config::$serverKey = config('midtrans.serverKey');
                 Config::$clientKey = config('midtrans.clientKey');
                 Config::$isProduction = (bool) config('midtrans.isProduction', false);
@@ -198,7 +165,54 @@ class TransactionController extends Controller
                 ];
 
                 $snapToken = Snap::getSnapToken($params);
-                $transaction->update(['midtrans_snap_token' => $snapToken]);;
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Token pembayaran berhasil dibuat.',
+                    'snap_token' => $snapToken,
+                    'is_non_cash' => true,
+                    'order_id' => $orderId,
+                ]);
+            }
+
+            DB::beginTransaction();
+
+            // Lock data menu agar stok aman saat diproses bersamaan
+            $menus = Menu::whereIn('id', array_keys($requestedQuantities))
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            foreach ($requestedQuantities as $menuId => $qty) {
+                $menu = $menus->get($menuId);
+                if (! $menu || ! $menu->is_active || $qty > $menu->stok) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Stok berubah, silakan periksa ulang keranjang.',
+                    ], 422);
+                }
+            }
+
+            $transaction = Transaction::create([
+                'id_user' => Auth::id(),
+                'tanggal' => now(),
+                'nomor_meja' => $validated['nomor_meja'] ?? null,
+                'mode_pesanan' => $validated['mode_pesanan'],
+                'subtotal' => $subtotal,
+                'pajak' => $pajak,
+                'total' => $total,
+                'metode_pembayaran' => $validated['metode_pembayaran'],
+                'dibayar' => $dibayar,
+                'kembalian' => $kembalian,
+                'payment_status' => 'settlement',
+            ]);
+
+            foreach ($items as $item) {
+                TransactionDetail::create($item + ['transaksi_id' => $transaction->id]);
+                $menu = $menus->get($item['menu_id']);
+                $menu->decrement('stok', $item['qty']);
             }
 
             DB::commit();
@@ -208,10 +222,133 @@ class TransactionController extends Controller
                 'message' => 'Transaksi berhasil dibuat.',
                 'transaction_id' => $transaction->id,
                 'snap_token' => $snapToken,
-                'is_non_cash' => $isNonCash,
+                'is_non_cash' => false,
             ]);
         } catch (\Throwable $e) {
-            DB::rollBack();
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Terjadi kesalahan server: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    public function finalizePayment(Request $request): JsonResponse
+    {
+        $validator = Validator::make($request->all(), [
+            'items' => 'required|array|min:1',
+            'items.*.menu_id' => 'required|integer|exists:menu,id',
+            'items.*.qty' => 'required|integer|min:1',
+            'metode_pembayaran' => 'required|in:QRIS,Transfer Bank,E-Wallet',
+            'nomor_meja' => 'nullable|string|max:10',
+            'mode_pesanan' => 'required|in:Dine In,Take Away',
+            'payment_status' => 'required|in:pending,settlement',
+            'midtrans_order_id' => 'required|string|max:100',
+            'midtrans_transaction_status' => 'nullable|string|max:50',
+            'midtrans_qr_code_url' => 'nullable|url|max:2048',
+            'midtrans_snap_token' => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validasi gagal. Periksa kembali input Anda.',
+                'errors' => $validator->errors(),
+            ], 422);
+        }
+
+        $validated = $validator->validated();
+
+        DB::beginTransaction();
+
+        try {
+            if (Transaction::where('midtrans_order_id', $validated['midtrans_order_id'])->exists()) {
+                DB::rollBack();
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaksi untuk order ini sudah diproses.',
+                ], 409);
+            }
+
+            $requestedQuantities = [];
+            foreach ($validated['items'] as $item) {
+                $menuId = (int) $item['menu_id'];
+                $requestedQuantities[$menuId] = ($requestedQuantities[$menuId] ?? 0) + (int) $item['qty'];
+            }
+
+            $menus = Menu::whereIn('id', array_keys($requestedQuantities))
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $subtotal = 0;
+            $items = [];
+
+            foreach ($requestedQuantities as $menuId => $qty) {
+                $menu = $menus->get($menuId);
+
+                if (! $menu || ! $menu->is_active || $qty > $menu->stok) {
+                    DB::rollBack();
+
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Stok berubah, silakan periksa ulang keranjang.',
+                    ], 422);
+                }
+
+                $itemSubtotal = $menu->harga * $qty;
+                $subtotal += $itemSubtotal;
+
+                $items[] = [
+                    'menu_id' => $menuId,
+                    'harga' => $menu->harga,
+                    'qty' => $qty,
+                    'subtotal' => $itemSubtotal,
+                    'catatan' => '',
+                ];
+            }
+
+            $pajak = (int) round($subtotal * 0.1);
+            $total = $subtotal + $pajak;
+            $paymentStatus = $validated['payment_status'];
+
+            $transaction = Transaction::create([
+                'id_user' => Auth::id(),
+                'tanggal' => now(),
+                'nomor_meja' => $validated['nomor_meja'] ?? null,
+                'mode_pesanan' => $validated['mode_pesanan'],
+                'subtotal' => $subtotal,
+                'pajak' => $pajak,
+                'total' => $total,
+                'metode_pembayaran' => $validated['metode_pembayaran'],
+                'dibayar' => $paymentStatus === 'settlement' ? $total : 0,
+                'kembalian' => 0,
+                'payment_status' => $paymentStatus,
+                'midtrans_order_id' => $validated['midtrans_order_id'],
+                'midtrans_snap_token' => $validated['midtrans_snap_token'] ?? null,
+                'midtrans_transaction_status' => $validated['midtrans_transaction_status'] ?? $paymentStatus,
+                'midtrans_qr_code_url' => $validated['midtrans_qr_code_url'] ?? null,
+            ]);
+
+            foreach ($items as $item) {
+                TransactionDetail::create($item + ['transaksi_id' => $transaction->id]);
+                $menus->get($item['menu_id'])?->decrement('stok', $item['qty']);
+            }
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'transaction_id' => $transaction->id,
+            ]);
+        } catch (\Throwable $e) {
+            if (DB::transactionLevel() > 0) {
+                DB::rollBack();
+            }
 
             return response()->json([
                 'success' => false,
