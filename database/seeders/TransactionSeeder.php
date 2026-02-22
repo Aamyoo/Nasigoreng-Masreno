@@ -28,8 +28,8 @@ class TransactionSeeder extends Seeder
                 'subtotal' => 40000,
                 'pajak' => 4000,
                 'total' => 44000,
-                'metode_input' => 'tunai'
-                ,'payment_status' => 'paid',
+                'metode_input' => 'tunai',
+                'payment_status' => 'paid',
                 'dibayar' => 50000,
                 'kembalian' => 6000,
             ],
@@ -41,9 +41,9 @@ class TransactionSeeder extends Seeder
                 'subtotal' => 35000,
                 'pajak' => 3500,
                 'total' => 38500,
-                'metode_input' => 'midtrans'
-                ,'payment_type_midtrans' => 'qris'
-                ,'payment_status' => 'paid',
+                'metode_input' => 'midtrans',
+                'payment_type_midtrans' => 'qris',
+                'payment_status' => 'paid',
                 'dibayar' => 38500,
                 'kembalian' => 0,
             ],
@@ -55,9 +55,9 @@ class TransactionSeeder extends Seeder
                 'subtotal' => 66000,
                 'pajak' => 6600,
                 'total' => 72600,
-                'metode_input' => 'midtrans'
-                ,'payment_type_midtrans' => 'bank_transfer'
-                ,'payment_status' => 'paid',
+                'metode_input' => 'midtrans',
+                'payment_type_midtrans' => 'bank_transfer',
+                'payment_status' => 'paid',
                 'dibayar' => 72600,
                 'kembalian' => 0,
             ],
@@ -69,9 +69,9 @@ class TransactionSeeder extends Seeder
                 'subtotal' => 30000,
                 'pajak' => 3000,
                 'total' => 33000,
-                'metode_input' => 'midtrans'
-                ,'payment_type_midtrans' => 'gopay'
-                ,'payment_status' => 'paid',
+                'metode_input' => 'midtrans',
+                'payment_type_midtrans' => 'gopay',
+                'payment_status' => 'paid',
                 'dibayar' => 40000,
                 'kembalian' => 7000,
             ],
@@ -83,8 +83,8 @@ class TransactionSeeder extends Seeder
                 'subtotal' => 85000,
                 'pajak' => 8500,
                 'total' => 93500,
-                'metode_input' => 'tunai'
-                ,'payment_status' => 'paid',
+                'metode_input' => 'tunai',
+                'payment_status' => 'paid',
                 'dibayar' => 100000,
                 'kembalian' => 6500,
             ],
@@ -96,9 +96,9 @@ class TransactionSeeder extends Seeder
                 'subtotal' => 45000,
                 'pajak' => 4500,
                 'total' => 49500,
-                'metode_input' => 'midtrans'
-                ,'payment_type_midtrans' => 'qris'
-                ,'payment_status' => 'paid',
+                'metode_input' => 'midtrans',
+                'payment_type_midtrans' => 'qris',
+                'payment_status' => 'paid',
                 'dibayar' => 49500,
                 'kembalian' => 0,
             ],
