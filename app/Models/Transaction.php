@@ -20,13 +20,15 @@ class Transaction extends Model
         'subtotal',
         'pajak',
         'total',
-        'metode_pembayaran',
+        'metode_input',
+        'payment_type_midtrans',
         'dibayar',
         'kembalian',
         'payment_status',
         'midtrans_order_id',
         'midtrans_snap_token',
         'midtrans_transaction_status',
+        'midtrans_response',
         'midtrans_qr_url',
     ];
 
@@ -36,7 +38,8 @@ class Transaction extends Model
         'pajak' => 'integer',
         'total' => 'integer',
         'dibayar' => 'integer',
-        'kembalian' => 'integer'
+        'kembalian' => 'integer',
+        'midtrans_response' => 'array',
     ];
 
     public function user()
@@ -47,5 +50,16 @@ class Transaction extends Model
     public function details()
     {
         return $this->hasMany(TransactionDetail::class, 'transaksi_id');
+    }
+
+    public function getMetodePembayaranAttribute(): string
+    {
+        if ($this->metode_input === 'tunai') {
+            return 'Tunai';
+        }
+
+        return $this->payment_type_midtrans
+            ? strtoupper(str_replace('_', ' ', $this->payment_type_midtrans))
+            : 'Midtrans';
     }
 }

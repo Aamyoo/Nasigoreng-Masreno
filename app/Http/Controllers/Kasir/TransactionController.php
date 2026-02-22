@@ -16,12 +16,8 @@ use Midtrans\Snap;
 
 class TransactionController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index()
     {
-        // Ambil hanya transaksi milik kasir yang sedang login
         $transactions = Transaction::where('id_user', Auth::id())
             ->orderBy('tanggal', 'desc')
             ->get();
@@ -29,9 +25,6 @@ class TransactionController extends Controller
         return view('kasir.transaction.index', compact('transactions'));
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         $menus = Menu::where('is_active', 1)
@@ -41,18 +34,13 @@ class TransactionController extends Controller
         return view('kasir.transaction.create', compact('menus'));
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request): JsonResponse
     {
-
-
         $validator = Validator::make($request->all(), [
             'items' => 'required|array|min:1',
             'items.*.menu_id' => 'required|integer|exists:menu,id',
             'items.*.qty' => 'required|integer|min:1',
-            'metode_pembayaran' => 'required|in:Tunai,QRIS,Transfer Bank,E-Wallet',
+            'metode_input' => 'required|in:tunai,midtrans',
             'dibayar' => 'required|integer|min:0',
             'nomor_meja' => 'nullable|string|max:10',
             'mode_pesanan' => 'required|in:Dine In,Take Away',
@@ -77,7 +65,6 @@ class TransactionController extends Controller
                 $requestedQuantities[$menuId] = ($requestedQuantities[$menuId] ?? 0) + (int) $item['qty'];
             }
 
-            // Lock data menu agar stok aman saat diproses bersamaan
             $menus = Menu::whereIn('id', array_keys($requestedQuantities))
                 ->lockForUpdate()
                 ->get()
@@ -117,14 +104,13 @@ class TransactionController extends Controller
                 ];
             }
 
-
             $pajak = (int) round($subtotal * 0.1);
             $total = $subtotal + $pajak;
-            $isNonCash = in_array($validated['metode_pembayaran'], ['QRIS', 'Transfer Bank', 'E-Wallet'], true);
-            $dibayar = $isNonCash ? 0 : (int) $validated['dibayar'];
-            $kembalian = $isNonCash ? 0 : $dibayar - $total;
+            $isMidtrans = $validated['metode_input'] === 'midtrans';
+            $dibayar = $isMidtrans ? 0 : (int) $validated['dibayar'];
+            $kembalian = $isMidtrans ? 0 : $dibayar - $total;
 
-            if (! $isNonCash && $kembalian < 0) {
+            if (! $isMidtrans && $kembalian < 0) {
                 DB::rollBack();
                 return response()->json([
                     'success' => false,
@@ -132,9 +118,7 @@ class TransactionController extends Controller
                 ], 422);
             }
 
-
             $orderId = 'TRX-' . now()->format('YmdHis') . '-' . strtoupper(substr(uniqid(), -6));
-
 
             $transaction = Transaction::create([
                 'id_user' => Auth::id(),
@@ -144,12 +128,11 @@ class TransactionController extends Controller
                 'subtotal' => $subtotal,
                 'pajak' => $pajak,
                 'total' => $total,
-                'metode_pembayaran' => $validated['metode_pembayaran'],
+                'metode_input' => $validated['metode_input'],
                 'dibayar' => $dibayar,
                 'kembalian' => $kembalian,
-                'payment_status' => $isNonCash ? 'pending' : 'settlement',
-                'midtrans_order_id' => $isNonCash ? $orderId : null,
-                'midtrans_transaction_status' => $isNonCash ? 'pending' : null,
+                'payment_status' => $isMidtrans ? 'pending' : 'paid',
+                'midtrans_order_id' => $isMidtrans ? $orderId : null,
             ]);
 
             foreach ($items as $item) {
@@ -159,7 +142,7 @@ class TransactionController extends Controller
             }
 
             $snapToken = null;
-            if ($isNonCash) {
+            if ($isMidtrans) {
                 Config::$serverKey = config('midtrans.serverKey');
                 Config::$clientKey = config('midtrans.clientKey');
                 Config::$isProduction = (bool) config('midtrans.isProduction', false);
@@ -194,7 +177,6 @@ class TransactionController extends Controller
                         'first_name' => Auth::user()->nama_lengkap ?? Auth::user()->name ?? Auth::user()->username,
                         'email' => Auth::user()->email,
                     ],
-                    'enabled_payments' => ['qris', 'bank_transfer', 'gopay', 'shopeepay'],
                 ];
 
                 $snapToken = Snap::getSnapToken($params);
@@ -208,7 +190,7 @@ class TransactionController extends Controller
                 'message' => 'Transaksi berhasil dibuat.',
                 'transaction_id' => $transaction->id,
                 'snap_token' => $snapToken,
-                'is_non_cash' => $isNonCash,
+                'is_non_cash' => $isMidtrans,
             ]);
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -218,55 +200,6 @@ class TransactionController extends Controller
                 'message' => 'Terjadi kesalahan server: ' . $e->getMessage(),
             ], 500);
         }
-    }
-
-    public function updatePaymentStatus(Request $request, Transaction $transaction): JsonResponse
-    {
-        if ($transaction->id_user !== Auth::id()) {
-            abort(403, 'Unauthorized action.');
-        }
-
-        $request->validate([
-            'status' => 'required|in:pending,settlement,expire,cancel,deny',
-            'transaction_status' => 'nullable|string|max:50',
-            'qr_url' => 'nullable|url|max:2048',
-        ]);
-
-        $status = $request->string('status')->toString();
-
-        if (in_array($status, ['expire', 'cancel', 'deny'], true)) {
-            $this->rollbackAndDeleteTransaction($transaction);
-
-            return response()->json([
-                'success' => true,
-                'deleted' => true,
-                'message' => 'Pembayaran gagal/dibatalkan. Transaksi dibatalkan.',
-            ]);
-        }
-
-        $transaction->update([
-            'payment_status' => $status,
-            'midtrans_transaction_status' => $request->string('transaction_status')->toString() ?: $transaction->midtrans_transaction_status,
-            'midtrans_qr_url' => $request->string('qr_url')->toString() ?: $transaction->midtrans_qr_url,
-            'dibayar' => $status === 'settlement' ? $transaction->total : $transaction->dibayar,
-            'kembalian' => 0,
-        ]);
-
-        return response()->json(['success' => true]);
-    }
-
-    private function rollbackAndDeleteTransaction(Transaction $transaction): void
-    {
-        DB::transaction(function () use ($transaction): void {
-            $transaction->loadMissing('details');
-
-            foreach ($transaction->details as $detail) {
-                Menu::where('id', $detail->menu_id)->increment('stok', $detail->qty);
-            }
-
-            TransactionDetail::where('transaksi_id', $transaction->id)->delete();
-            $transaction->delete();
-        });
     }
 
     public function receipt(Transaction $transaction)
@@ -280,12 +213,8 @@ class TransactionController extends Controller
         return view('kasir.transaction.receipt', compact('transaction'));
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(Transaction $transaction)
     {
-        // Pastikan kasir hanya bisa lihat transaksinya sendiri
         if ($transaction->id_user !== Auth::id()) {
             abort(403, 'Unauthorized action.');
         }
