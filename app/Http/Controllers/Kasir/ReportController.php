@@ -29,7 +29,13 @@ class ReportController extends Controller
         }
 
         if ($request->filled('metode_pembayaran')) {
-            $query->where('metode_pembayaran', $request->input('metode_pembayaran'));
+            if ($request->input('metode_pembayaran') === 'Tunai') {
+                $query->where('metode_input', 'tunai');
+            } elseif ($request->input('metode_pembayaran') === 'Midtrans') {
+                $query->where('metode_input', 'midtrans');
+            } else {
+                $query->where('payment_type_midtrans', strtolower(str_replace(' ', '_', $request->input('metode_pembayaran'))));
+            }
         }
 
         if ($request->filled('transaction_id')) {
@@ -55,7 +61,7 @@ class ReportController extends Controller
         $transactions = $this->buildQuery($request)->paginate(20)->withQueryString();
 
         $cashiers = User::where('role', 'kasir')->orderBy('nama_lengkap')->get(['id', 'nama_lengkap']);
-        $paymentMethods = ['Tunai', 'QRIS', 'Transfer Bank', 'E-Wallet'];
+        $paymentMethods = ['Tunai', 'Midtrans'];
 
         // Quick actions data
         $todayStart = now()->startOfDay();

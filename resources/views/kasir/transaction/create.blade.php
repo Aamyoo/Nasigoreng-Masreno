@@ -87,12 +87,13 @@
                             <!-- Payment Method -->
                             <div class="mb-4">
                                 <label class="block text-gray-700 text-sm font-bold mb-2">Metode Pembayaran</label>
-                                <select id="metode_pembayaran" name="metode_pembayaran"
+                                <select id="metode_input" name="metode_input"
                                     class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                                    <option value="Tunai">Tunai</option>
-                                    <option value="QRIS">QRIS</option>
-                                    <option value="Transfer Bank">Transfer Bank</option>
-                                    {{-- <option value="E-Wallet">E-Wallet</option> --}}
+                                    <option value="tunai">Tunai</option>
+                                    <option value="midtrans">Non Tunai (Midtrans)</option>
+                                    
+                                    
+                                    {{--  --}}
                                 </select>
                             </div>
 
@@ -115,18 +116,19 @@
                             <!-- Payment Method -->
                             {{-- <div class="mb-4">
                                 <label class="block text-gray-700 text-sm font-bold mb-2">Metode Pembayaran</label>
-                                <select id="metode_pembayaran" name="metode_pembayaran"
+                                <select id="metode_input" name="metode_input"
                                     class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
-                                    <option value="Tunai">Tunai</option>
-                                    <option value="QRIS">QRIS</option>
-                                    <option value="Transfer Bank">Transfer Bank</option>
-                                    <option value="E-Wallet">E-Wallet</option>
+                                    <option value="tunai">Tunai</option>
+                                    <option value="midtrans">Non Tunai (Midtrans)</option>
+                                    
+                                    
+                                    
                                 </select>
                             </div> --}}
 
                             <div id="non-cash-info"
                                 class="hidden mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                                <h4 class="text-sm font-semibold text-indigo-900">Informasi Pembayaran Non-Tunai</h4>
+                                <h4 class="text-sm font-semibold text-indigo-900">Pembayaran akan diproses melalui Midtrans Snap</h4>
 
                                 <div id="qris-info" class="hidden mt-3">
                                     <p class="text-xs text-indigo-700 mb-2">Scan QR untuk menyelesaikan transaksi QRIS:</p>
@@ -240,7 +242,7 @@
             const printReceiptBtn = document.getElementById('print-receipt');
             const modePesananSelect = document.getElementById('mode_pesanan');
             const tableNumberContainer = document.getElementById('table-number-container');
-            const paymentMethodSelect = document.getElementById('metode_pembayaran');
+            const paymentMethodSelect = document.getElementById('metode_input');
             const nonCashInfo = document.getElementById('non-cash-info');
             const qrisInfo = document.getElementById('qris-info');
             const bankTransferInfo = document.getElementById('bank-transfer-info');
@@ -274,8 +276,7 @@
                 }
 
                 const total = parseInt(totalElement.textContent.replace(/[^\d]/g, ''));
-                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethodSelect
-                    .value);
+                const isNonCashPayment = paymentMethodSelect.value === 'midtrans';
                 const dibayar = isNonCashPayment ? total : (parseInt(dibayarElement.value) || 0);
 
                 if (!isNonCashPayment && dibayar < total) {
@@ -293,7 +294,7 @@
                 const requestData = {
                     items: items, // Ini adalah array, bukan string
                     mode_pesanan: modePesananSelect.value,
-                    metode_pembayaran: document.getElementById('metode_pembayaran').value,
+                    metode_input: document.getElementById('metode_input').value,
                     dibayar: dibayar
                 };
 
@@ -325,27 +326,19 @@
                                 onSuccess: function(result) {
                                     const qrUrl = extractQrUrl(result);
                                     updateQrisPreview(qrUrl);
-                                    updateMidtransStatus(data.transaction_id, 'settlement', result.transaction_status,
-                                        qrUrl);
                                     showSuccessModal(receiptUrl);
                                 },
                                 onPending: function(result) {
                                     const qrUrl = extractQrUrl(result);
                                     updateQrisPreview(qrUrl);
-                                    updateMidtransStatus(data.transaction_id, 'pending', result.transaction_status,
-                                        qrUrl);
                                     alert('Pembayaran sedang menunggu penyelesaian. Silakan lanjutkan pembayaran.');
                                 },
                                 onError: function(result) {
                                     const qrUrl = extractQrUrl(result);
-                                    updateMidtransStatus(data.transaction_id, 'deny', result.transaction_status,
-                                        qrUrl);
                                     alert('Pembayaran gagal diproses oleh Midtrans. Transaksi dibatalkan.');
                                 },
                                 onClose: function(result) {
                                     const qrUrl = extractQrUrl(result);
-                                    updateMidtransStatus(data.transaction_id, 'cancel', result?.transaction_status,
-                                        qrUrl);
                                     alert('Popup pembayaran ditutup. Transaksi dibatalkan.');
                                 }
                             });
@@ -474,13 +467,13 @@
 
             function updatePaymentMethodUI() {
                 const paymentMethod = paymentMethodSelect.value;
-                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethod);
+                const isNonCashPayment = paymentMethod === 'midtrans';
 
                 nonCashInfo.classList.toggle('hidden', !isNonCashPayment);
-                qrisInfo.classList.toggle('hidden', paymentMethod !== 'QRIS');
-                bankTransferInfo.classList.toggle('hidden', paymentMethod !== 'Transfer Bank');
+                qrisInfo.classList.add('hidden');
+                bankTransferInfo.classList.add('hidden');
 
-                if (paymentMethod !== 'QRIS') {
+                if (paymentMethod !== 'midtrans') {
                     qrisCopyWrapper.classList.add('hidden');
                     qrisCodeUrlElement.value = '';
                 }
@@ -559,21 +552,6 @@
                 alert(copied ? 'QR_Code_Url berhasil disalin.' : 'Gagal menyalin QR_Code_Url. Silakan salin manual.');
             }
 
-            function updateMidtransStatus(transactionId, status, transactionStatus, qrUrl = null) {
-                fetch(`/kasir/transaction/${transactionId}/payment-status`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': '{{ csrf_token() }}'
-                    },
-                    body: JSON.stringify({
-                        status: status,
-                        transaction_status: transactionStatus || null,
-                        qr_url: qrUrl || null
-                    })
-                }).catch((error) => console.error('Failed updating status:', error));
-            }
-
             function calculateTotals() {
                 let subtotal = 0;
 
@@ -593,7 +571,7 @@
 
             function calculateChange() {
                 const total = parseInt(totalElement.textContent.replace(/[^\d]/g, ''));
-                const isNonCashPayment = ['QRIS', 'Transfer Bank', 'E-Wallet'].includes(paymentMethodSelect.value);
+                const isNonCashPayment = paymentMethodSelect.value === 'midtrans';
                 const dibayar = isNonCashPayment ? total : (parseInt(dibayarElement.value) || 0);
                 const kembalian = dibayar - total;
 
