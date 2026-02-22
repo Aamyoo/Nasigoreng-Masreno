@@ -16,11 +16,17 @@ return new class extends Migration {
             $table->integer('subtotal');
             $table->integer('pajak');
             $table->integer('total');
-            $table->enum('metode_pembayaran', ['Tunai', 'QRIS', 'Transfer Bank', 'E-Wallet']);
+            $table->enum('metode_input', ['tunai', 'midtrans']);
+            $table->string('payment_type_midtrans', 50)->nullable();
             $table->integer('dibayar');
             $table->integer('kembalian');
-            $table->timestamp('updated_at')->nullable(); // Hanya updated_at
-            $table->timestamp('created_at')->nullable();
+            $table->string('payment_status', 20)->default('pending');
+            $table->string('midtrans_order_id')->nullable()->unique();
+            $table->text('midtrans_snap_token')->nullable();
+            $table->string('midtrans_transaction_status', 50)->nullable();
+            $table->text('midtrans_qr_url')->nullable();
+            $table->json('midtrans_response')->nullable();
+            $table->timestamps();
         });
     }
 
