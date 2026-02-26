@@ -22,6 +22,8 @@ class Transaction extends Model
         'total',
         'metode_input',
         'payment_type_midtrans',
+        'payment_acquirer',
+        'payment_issuer',
         'dibayar',
         'kembalian',
         'payment_status',
@@ -58,8 +60,22 @@ class Transaction extends Model
             return 'Tunai';
         }
 
-        return $this->payment_type_midtrans
-            ? strtoupper(str_replace('_', ' ', $this->payment_type_midtrans))
-            : 'Midtrans';
+        $segments = [];
+
+        if ($this->payment_type_midtrans) {
+            $segments[] = strtoupper(str_replace('_', ' ', $this->payment_type_midtrans));
+        } else {
+            $segments[] = 'Midtrans';
+        }
+
+        if ($this->payment_issuer) {
+            $segments[] = strtoupper($this->payment_issuer);
+        }
+
+        if ($this->payment_acquirer) {
+            $segments[] = strtoupper($this->payment_acquirer);
+        }
+
+        return implode(' - ', $segments);
     }
 }

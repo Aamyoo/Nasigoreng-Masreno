@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Transaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 
 class MidtransCallbackController extends Controller
 {
@@ -29,6 +30,27 @@ class MidtransCallbackController extends Controller
         $transactionStatus = (string) $request->input('transaction_status');
         $paymentType = (string) $request->input('payment_type');
 
+        $expectedGrossAmount = number_format((float) $transaction->total, 2, '.', '');
+        $incomingGrossAmount = number_format((float) $grossAmount, 2, '.', '');
+
+        if ($incomingGrossAmount !== $expectedGrossAmount) {
+            return response()->json(['message' => 'Gross amount mismatch'], 422);
+        }
+
+        $vaBank = Arr::get($request->input('va_numbers', []), '0.bank');
+        $bankFromPermata = $request->input('permata_va_number') ? 'permata' : null;
+
+        $issuer = (string) ($request->input('issuer') ?? '');
+        $acquirer = (string) ($request->input('acquirer') ?? '');
+
+        if ($paymentType === 'bank_transfer') {
+            $issuer = $vaBank ?: $bankFromPermata ?: ($issuer !== '' ? $issuer : null);
+        }
+
+        if ($paymentType !== 'qris') {
+            $acquirer = $acquirer !== '' ? $acquirer : null;
+        }
+
         $paymentStatus = match ($transactionStatus) {
             'settlement', 'capture' => 'paid',
             'pending' => 'pending',
@@ -41,6 +63,8 @@ class MidtransCallbackController extends Controller
         $transaction->update([
             'payment_status' => $paymentStatus,
             'payment_type_midtrans' => $paymentType !== '' ? $paymentType : $transaction->payment_type_midtrans,
+            'payment_acquirer' => $acquirer,
+            'payment_issuer' => $issuer !== '' ? $issuer : null,
             'midtrans_transaction_status' => $transactionStatus,
             'midtrans_response' => $request->all(),
             'dibayar' => $paymentStatus === 'paid' ? $transaction->total : $transaction->dibayar,
