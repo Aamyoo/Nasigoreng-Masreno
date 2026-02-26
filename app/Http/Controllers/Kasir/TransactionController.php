@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use App\Support\TransactionCalculator;
 use Midtrans\Config;
 use Midtrans\Snap;
 
@@ -41,7 +42,7 @@ class TransactionController extends Controller
             'items.*.menu_id' => 'required|integer|exists:menu,id',
             'items.*.qty' => 'required|integer|min:1',
             'metode_input' => 'required|in:tunai,midtrans',
-            'dibayar' => 'required|integer|min:0',
+            'dibayar' => 'required|numeric|min:0',
             'nomor_meja' => 'nullable|string|max:10',
             'mode_pesanan' => 'required|in:Dine In,Take Away',
         ]);
@@ -70,7 +71,6 @@ class TransactionController extends Controller
                 ->get()
                 ->keyBy('id');
 
-            $subtotal = 0;
             $items = [];
 
             foreach ($requestedQuantities as $menuId => $qty) {
@@ -92,8 +92,7 @@ class TransactionController extends Controller
                     ], 422);
                 }
 
-                $itemSubtotal = $menu->harga * $qty;
-                $subtotal += $itemSubtotal;
+                $itemSubtotal = (int) $menu->harga * (int) $qty;
 
                 $items[] = [
                     'menu_id' => $menuId,
@@ -104,10 +103,20 @@ class TransactionController extends Controller
                 ];
             }
 
-            $pajak = (int) round($subtotal * 0.1);
-            $total = $subtotal + $pajak;
+            $totals = TransactionCalculator::calculate($items);
+            $subtotal = $totals['subtotal'];
+            $pajak = $totals['pajak'];
+            $total = $totals['total'];
+
+            if ($total < 0) {
+                DB::rollBack();
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Total transaksi tidak valid.',
+                ], 422);
+            }
             $isMidtrans = $validated['metode_input'] === 'midtrans';
-            $dibayar = $isMidtrans ? 0 : (int) $validated['dibayar'];
+            $dibayar = $isMidtrans ? 0 : (int) round((float) $validated['dibayar']);
             $kembalian = $isMidtrans ? 0 : $dibayar - $total;
 
             if (! $isMidtrans && $kembalian < 0) {
@@ -170,7 +179,7 @@ class TransactionController extends Controller
                 $params = [
                     'transaction_details' => [
                         'order_id' => $orderId,
-                        'gross_amount' => (int) $total,
+                        'gross_amount' => $total,
                     ],
                     'item_details' => $lineItems,
                     'customer_details' => [

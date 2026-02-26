@@ -14,12 +14,12 @@
                 <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Tanggal</th>
                 <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">No. Transaksi</th>
                 <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
-                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Metode</th>
+                <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Metode/Channel</th>
                 <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Aksi</th>
             </tr>
         </thead>
         <tbody>
-            @forelse(auth()->user()->transactions()->latest()->get() as $transaction)
+            @forelse($transactions as $transaction)
             <tr>
                 <td class="px-5 py-5 border-b border-gray-200 text-sm">{{ $transaction->tanggal->format('d M Y H:i') }}</td>
                 <td class="px-5 py-5 border-b border-gray-200 text-sm">#{{ $transaction->id }}</td>

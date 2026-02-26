@@ -26,6 +26,18 @@
                 <div>
                     <span class="font-medium">Mode Pesanan:</span> {{ $transaction->mode_pesanan }}
                 </div>
+
+                @if ($transaction->metode_input === 'midtrans')
+                    <div>
+                        <span class="font-medium">Channel Payment:</span> {{ $transaction->payment_type_midtrans ? strtoupper(str_replace('_', ' ', $transaction->payment_type_midtrans)) : '-' }}
+                    </div>
+                    <div>
+                        <span class="font-medium">Acquirer:</span> {{ $transaction->payment_acquirer ? strtoupper($transaction->payment_acquirer) : '-' }}
+                    </div>
+                    <div>
+                        <span class="font-medium">Issuer/Bank:</span> {{ $transaction->payment_issuer ? strtoupper($transaction->payment_issuer) : '-' }}
+                    </div>
+                @endif
                 @if ($transaction->payment_type_midtrans === 'qris' && $transaction->midtrans_qr_url)
                     <div class="col-span-2">
                         <span class="font-medium">QR URL:</span>
