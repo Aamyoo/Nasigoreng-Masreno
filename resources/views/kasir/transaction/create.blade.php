@@ -91,18 +91,18 @@
                                     class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline">
                                     <option value="tunai">Tunai</option>
                                     <option value="midtrans">Non Tunai (Midtrans)</option>
-                                    
-                                    
+
+
                                     {{--  --}}
                                 </select>
                             </div>
 
                             {{-- @@ -74,50 +74,77 @@
                             class="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 lead --}}
-                            <div class="flex
+                            {{-- <div class="flex
                             justify-between mb-2">
-                                <span class="text-gray-600">Subtotal:</span>
-                                <span id="subtotal" class="font-semibold">Rp. 0</span>
+                                <span class="text-gray-600">Subtotal:</span> --}}
+                            {{-- <span id="subtotal" class="font-semibold">Rp. 0</span>
                             </div>
                             <div class="flex justify-between mb-2">
                                 <span class="text-gray-600">Pajak (10%):</span>
@@ -111,7 +111,7 @@
                             <div class="flex justify-between mb-4">
                                 <span class="text-gray-800 font-bold">Total:</span>
                                 <span id="total" class="font-bold text-lg">Rp. 0</span>
-                            </div>
+                            </div> --}}
 
                             <!-- Payment Method -->
                             {{-- <div class="mb-4">
@@ -128,7 +128,8 @@
 
                             <div id="non-cash-info"
                                 class="hidden mb-4 rounded-lg border border-indigo-200 bg-indigo-50 p-3">
-                                <h4 class="text-sm font-semibold text-indigo-900">Pembayaran akan diproses melalui Midtrans Snap</h4>
+                                <h4 class="text-sm font-semibold text-indigo-900">Pembayaran akan diproses melalui Midtrans
+                                    Snap</h4>
 
                                 <div id="qris-info" class="hidden mt-3">
                                     <p class="text-xs text-indigo-700 mb-2">Scan QR untuk menyelesaikan transaksi QRIS:</p>
@@ -136,7 +137,8 @@
                                         src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=NASIGORENG-MASRENO-QRIS-DUMMY"
                                         alt="QRIS" class="w-44 h-44 border rounded bg-white p-2 mx-auto">
                                     <div id="qris-copy-wrapper" class="hidden mt-3">
-                                        <label for="qris-code-url" class="block text-xs font-semibold text-indigo-900 mb-1">QR_Code_Url</label>
+                                        <label for="qris-code-url"
+                                            class="block text-xs font-semibold text-indigo-900 mb-1">QR_Code_Url</label>
                                         <div class="flex items-center gap-2">
                                             <input id="qris-code-url" type="text" readonly
                                                 class="w-full rounded border border-indigo-200 bg-white px-2 py-1 text-xs text-indigo-900"
@@ -331,15 +333,18 @@
                                 onPending: function(result) {
                                     const qrUrl = extractQrUrl(result);
                                     updateQrisPreview(qrUrl);
-                                    alert('Pembayaran sedang menunggu penyelesaian. Silakan lanjutkan pembayaran.');
+                                    alert(
+                                        'Pembayaran sedang menunggu penyelesaian. Silakan lanjutkan pembayaran.');
                                 },
                                 onError: function(result) {
                                     const qrUrl = extractQrUrl(result);
-                                    alert('Pembayaran gagal diproses oleh Midtrans. Transaksi dibatalkan.');
+                                    alert(
+                                        'Pembayaran gagal diproses oleh Midtrans. Transaksi dibatalkan.');
                                 },
                                 onClose: function(result) {
                                     const qrUrl = extractQrUrl(result);
-                                    alert('Popup pembayaran ditutup. Transaksi dibatalkan.');
+                                    alert(
+                                    'Popup pembayaran ditutup. Transaksi dibatalkan.');
                                 }
                             });
 
@@ -549,7 +554,8 @@
                 qrisCodeUrlElement.setSelectionRange(0, 99999);
 
                 const copied = document.execCommand('copy');
-                alert(copied ? 'QR_Code_Url berhasil disalin.' : 'Gagal menyalin QR_Code_Url. Silakan salin manual.');
+                alert(copied ? 'QR_Code_Url berhasil disalin.' :
+                    'Gagal menyalin QR_Code_Url. Silakan salin manual.');
             }
 
             function calculateTotals() {
